@@ -78,7 +78,7 @@ func main() {
 
 	// API ดึงข้อมูลแผนประกันทั้งหมด พร้อมเรทเบี้ย
 	app.Get("/api/plans", func(c *fiber.Ctx) error {
-		rows, err := db.Query("SELECT id, title, category, description, google_drive_file_id, slug, is_active FROM insurance_plans WHERE is_active = true")
+		rows, err := db.Query("SELECT id, title, category, description, google_drive_file_id, slug, is_active FROM public.insurance_plans WHERE is_active = true")
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -92,7 +92,7 @@ func main() {
 			}
 
 			// ดึงเรทเบี้ยประกันโดยใช้ min_age และ max_age
-			subRows, err := db.Query("SELECT id, plan_id, min_age, max_age, male_rate, female_rate, annual_rate, semi_annual_rate, quarterly_rate, monthly_rate FROM premium_rates WHERE plan_id = $1", p.ID)
+			subRows, err := db.Query("SELECT id, plan_id, min_age, max_age, male_rate, female_rate, annual_rate, semi_annual_rate, quarterly_rate, monthly_rate FROM public.premium_rates WHERE plan_id = $1", p.ID)
 
 			rates := []PremiumRate{}
 			if err == nil {
@@ -130,7 +130,7 @@ func main() {
 		}
 
 		var leadID int
-		query := `INSERT INTO leads (plan_id, full_name, phone_number, line_id, date_of_birth, created_at) 
+		query := `INSERT INTO public.leads (plan_id, full_name, phone_number, line_id, date_of_birth, created_at) 
 		          VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id`
 		err := db.QueryRow(query, req.PlanID, req.FullName, req.PhoneNumber, req.LineID, req.DateOfBirth).Scan(&leadID)
 		if err != nil {
@@ -138,7 +138,7 @@ func main() {
 		}
 
 		var planTitle string
-		db.QueryRow("SELECT title FROM insurance_plans WHERE id = $1", req.PlanID).Scan(&planTitle)
+		db.QueryRow("SELECT title FROM public.insurance_plans WHERE id = $1", req.PlanID).Scan(&planTitle)
 
 		go sendTelegramNotification(planTitle, req)
 
@@ -157,7 +157,7 @@ func main() {
 
 		// ป้องกันการนับรัวๆ (สามารถเช็ค Session หรือทำ Cooldown เพิ่มเติมได้ที่นี่)
 
-		_, err := db.Exec("UPDATE insurance_plans SET view_count = view_count + 1 WHERE id = $1", planID)
+		_, err := db.Exec("UPDATE public.insurance_plans SET view_count = view_count + 1 WHERE id = $1", planID)
 
 		if err != nil {
 
