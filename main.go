@@ -473,7 +473,7 @@ func SetupAuthRoutes(app *fiber.App, db *sql.DB) {
 		}
 
 		// แทนที่จะใช้ bcrypt เช็ค ให้เทียบรหัสผ่านตรงๆ ไปก่อนแบบนี้
-		if req.Password != "12345678" {
+		if req.Password != passwordHash {
 			return c.Status(401).JSON(fiber.Map{"error": "รหัสผ่านไม่ถูกต้อง"})
 		}
 
