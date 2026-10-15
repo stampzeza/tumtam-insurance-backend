@@ -9,11 +9,27 @@ import (
 	"strconv"
 
 	"github.com/go-resty/resty/v2"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// คีย์ลับสำหรับเซ็นต์ Token (แนะนำให้อخذมาจาก Environment Variable ในโปรดักชัน)
+
+var jwtSecret = []byte("YOUR_SUPER_SECRET_KEY_CHANGEME")
+
+type LoginRequest struct {
+	Username string `json:"username"`
+
+	Password string `json:"password"`
+}
 
 // โครงสร้างข้อมูลตารางเรทเบี้ยประกัน (ใช้ min_age และ max_age)
 type PremiumRate struct {
@@ -179,8 +195,9 @@ func main() {
 
 	})
 
+	adminProtected := app.Group("/api", AuthMiddleware())
 	// 1. API เพิ่มแผนประกันใหม่ (Create / Insert)
-	app.Post("/api/plans", func(c *fiber.Ctx) error {
+	adminProtected.Post("/plans", func(c *fiber.Ctx) error {
 
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
@@ -217,7 +234,7 @@ func main() {
 	})
 
 	// 2. API แก้ไขแผนประกัน (Update)
-	app.Put("/api/plans/:id", func(c *fiber.Ctx) error {
+	adminProtected.Put("/plans/:id", func(c *fiber.Ctx) error {
 
 		// 1. ลอง Print ดู JSON ดิบๆ ที่ส่งมาจากหน้าบ้าน
 
@@ -270,7 +287,7 @@ func main() {
 	})
 
 	// 3. API ลบแผนประกัน (Delete)
-	app.Delete("/api/plans/:id", func(c *fiber.Ctx) error {
+	adminProtected.Delete("/plans/:id", func(c *fiber.Ctx) error {
 		planID := c.Params("id")
 
 		// 1. ลบเรทเบี้ยที่เกี่ยวข้องออกก่อน (ป้องกันติด Foreign Key Constraint)
@@ -290,6 +307,8 @@ func main() {
 			"message": "ลบแผนประกันสำเร็จ",
 		})
 	})
+
+	app.Listen(":3000")
 
 	log.Println("Go Backend กำลังรันที่พอร์ต 8080...")
 	log.Fatal(app.Listen(":8080"))
@@ -421,4 +440,118 @@ func parseToInt(val interface{}) int {
 		return parsed
 	}
 	return 0
+}
+
+// 1. API สำหรับเข้าสู่ระบบ
+
+func SetupAuthRoutes(app *fiber.App, db *sql.DB) {
+
+	app.Post("/api/login", func(c *fiber.Ctx) error {
+
+		var req LoginRequest
+
+		if err := c.BodyParser(&req); err != nil {
+
+			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลไม่ถูกต้อง"})
+
+		}
+
+		var id int
+
+		var passwordHash string
+
+		query := "SELECT id, password_hash FROM public.admins WHERE username = $1"
+
+		err := db.QueryRow(query, req.Username).Scan(&id, &passwordHash)
+
+		if err != nil {
+
+			return c.Status(401).JSON(fiber.Map{"error": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"})
+
+		}
+
+		// ตรวจสอบรหัสผ่านว่าตรงกับ Hash ในฐานข้อมูลไหม
+
+		err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
+
+		if err != nil {
+
+			return c.Status(401).JSON(fiber.Map{"error": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"})
+
+		}
+
+		// สร้าง JWT Token (มีอายุ 24 ชั่วโมง)
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+
+			"admin_id": id,
+
+			"username": req.Username,
+
+			"exp": time.Now().Add(time.Hour * 24).Unix(),
+		})
+
+		tokenString, err := token.SignedString(jwtSecret)
+
+		if err != nil {
+
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถสร้าง Token ได้"})
+
+		}
+
+		return c.JSON(fiber.Map{
+
+			"success": true,
+
+			"token": tokenString,
+		})
+
+	})
+
+}
+
+// 2. Middleware สำหรับตรวจสอบ Token ก่อนให้เข้าถึง API จัดการแผนประกัน
+
+func AuthMiddleware() fiber.Handler {
+
+	return func(c *fiber.Ctx) error {
+
+		authHeader := c.Get("Authorization")
+
+		if authHeader == "" {
+
+			return c.Status(401).JSON(fiber.Map{"error": "กรุณาเข้าสู่ระบบ (ไม่พบ Token)"})
+
+		}
+
+		// รูปแบบ Header จะเป็น "Bearer <token>"
+
+		tokenStr := ""
+
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+
+			tokenStr = authHeader[7:]
+
+		} else {
+
+			return c.Status(401).JSON(fiber.Map{"error": "รูปแบบ Token ไม่ถูกต้อง"})
+
+		}
+
+		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+
+			return jwtSecret, nil
+
+		})
+
+		if err != nil || !token.Valid {
+
+			return c.Status(401).JSON(fiber.Map{"error": "Token ไม่ถูกต้องหรือหมดอายุ"})
+
+		}
+
+		return c.Next() // ผ่านไปทำ API ต่อได้
+
+	}
+
 }
