@@ -21,6 +21,7 @@ type PremiumRate struct {
 	PlanID     int         `json:"plan_id"`
 	MinAge     int         `json:"min_age"`
 	MaxAge     int         `json:"max_age"`
+	AgeRange   string      `json:"age_range"`
 	MaleRate   interface{} `json:"male_rate"`
 	FemaleRate interface{} `json:"female_rate"`
 }
@@ -96,6 +97,16 @@ func main() {
 				for subRows.Next() {
 					var r PremiumRate
 					subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate)
+
+					// 💡 เช็คเงื่อนไข: ถ้า min_age เท่ากับ max_age ให้แสดงเป็นอายุเดียว (เช่น "21 ปี")
+					if r.MinAge == r.MaxAge {
+						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
+					} else if r.MaxAge == 0 {
+						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
+					} else {
+						// แบบช่วงอายุปกติ (เช่น "30 - 35 ปี")
+						r.AgeRange = fmt.Sprintf("%d - %d", r.MinAge, r.MaxAge)
+					}
 
 					rates = append(rates, r)
 				}
@@ -226,23 +237,15 @@ func main() {
 
 		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
 		for _, rate := range plan.Rates {
-
 			maleRate := toFloat(rate.MaleRate)
-
 			femaleRate := toFloat(rate.FemaleRate)
 
 			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate, created_at) 
-
 						VALUES ($1, $2, $3, $4, $5, NOW())`
-
 			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, maleRate, femaleRate)
-
 			if err != nil {
-
 				continue
-
 			}
-
 		}
 
 		return c.JSON(fiber.Map{
