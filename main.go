@@ -173,23 +173,6 @@ func main() {
 
 	// 1. API เพิ่มแผนประกันใหม่ (Create / Insert)
 	app.Post("/api/plans", func(c *fiber.Ctx) error {
-		// ลองรับเป็น Map ดิบๆ ก่อนเลย
-
-		var rawData map[string]interface{}
-
-		if err := c.BodyParser(&rawData); err != nil {
-
-			println("CRITICAL PARSE ERROR:", err.Error())
-
-			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
-
-		}
-
-		println("SUCCESSFULLY RECEIVED JSON DATA!")
-
-		// ตรงนี้แค่เทสปริ้นท์ดู
-
-		return c.JSON(fiber.Map{"success": true, "received": rawData})
 
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
@@ -227,6 +210,25 @@ func main() {
 
 	// 2. API แก้ไขแผนประกัน (Update)
 	app.Put("/api/plans/:id", func(c *fiber.Ctx) error {
+
+		// ลองรับเป็น Map ดิบๆ ก่อนเลย
+
+		var rawData map[string]interface{}
+
+		if err := c.BodyParser(&rawData); err != nil {
+
+			println("CRITICAL PARSE ERROR:", err.Error())
+
+			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+
+		}
+
+		println("SUCCESSFULLY RECEIVED JSON DATA!")
+
+		// ตรงนี้แค่เทสปริ้นท์ดู
+
+		return c.JSON(fiber.Map{"success": true, "received": rawData})
+
 		planID := c.Params("id")
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
