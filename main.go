@@ -173,38 +173,96 @@ func main() {
 	app.Post("/api/plans", func(c *fiber.Ctx) error {
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Cannot parse JSON"})
+			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลแผนประกันไม่ถูกต้อง: " + err.Error()})
 		}
 
-		// TODO: เขียน SQL INSERT ข้อมูลลงตาราง insurance_plans
-		// และนำ ID ที่เพิ่งสร้าง มาวนลูป INSERT เรทเบี้ยลงตาราง premium_rates
+		// 1. Insert ข้อมูลลงตาราง insurance_plans
+		var planID int
+		queryPlan := `INSERT INTO public.insurance_plans (title, category, description, google_drive_file_id, slug, is_active) 
+					VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 
-		return c.JSON(fiber.Map{"message": "Plan created successfully", "data": plan})
+		err := db.QueryRow(queryPlan, plan.Title, plan.Category, plan.Description, plan.GoogleDriveFileID, plan.Slug, plan.IsActive).Scan(&planID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถบันทึกแผนประกันได้: " + err.Error()})
+		}
+
+		// 2. วนลูป Insert เรทเบี้ยลงตาราง public.premium_rates (ถ้ามี)
+		for _, rate := range plan.Rates {
+			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate) 
+						VALUES ($1, $2, $3, $4, $5)`
+			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, rate.MaleRate, rate.FemaleRate)
+			if err != nil {
+				// ถ้าบันทึกเรทเบี้ยไม่ผ่าน สามารถข้ามหรือจัดการ Error ตามต้องการ
+				continue
+			}
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "สร้างแผนประกันสำเร็จ",
+			"plan_id": planID,
+		})
 	})
 
 	// 2. API แก้ไขแผนประกัน (Update)
 	app.Put("/api/plans/:id", func(c *fiber.Ctx) error {
-		id := c.Params("id")
+		planID := c.Params("id")
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Cannot parse JSON"})
+			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง: " + err.Error()})
 		}
 
-		// TODO: เขียน SQL UPDATE ข้อมูลตาราง insurance_plans ตาม id
-		// สำหรับ premium_rates แนะนำให้ใช้วิธี DELETE ของเก่าทิ้งทั้งหมดที่มี plan_id นี้
-		// แล้ว INSERT ชุดใหม่เข้าไปแทน (วิธีนี้ง่ายและสะดวกที่สุดสำหรับการอัปเดตตารางย่อย)
+		// 1. Update ข้อมูลหลักในตาราง insurance_plans
+		queryUpdate := `UPDATE public.insurance_plans 
+						SET title = $1, category = $2, description = $3, google_drive_file_id = $4, slug = $5, is_active = $6 
+						WHERE id = $7`
+		_, err := db.Exec(queryUpdate, plan.Title, plan.Category, plan.Description, plan.GoogleDriveFileID, plan.Slug, plan.IsActive, planID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถอัปเดตแผนประกันได้: " + err.Error()})
+		}
 
-		return c.JSON(fiber.Map{"message": "Plan updated successfully", "id": id})
+		// 2. ลบเรทเบี้ยชุดเก่าทิ้งทั้งหมดของแผนนี้
+		_, err = db.Exec("DELETE FROM public.premium_rates WHERE plan_id = $1", planID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถเคลียร์เรทเบี้ยเก่าได้: " + err.Error()})
+		}
+
+		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
+		for _, rate := range plan.Rates {
+			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate) 
+						VALUES ($1, $2, $3, $4, $5)`
+			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, rate.MaleRate, rate.FemaleRate)
+			if err != nil {
+				continue
+			}
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "อัปเดตแผนประกันสำเร็จ",
+		})
 	})
 
 	// 3. API ลบแผนประกัน (Delete)
 	app.Delete("/api/plans/:id", func(c *fiber.Ctx) error {
-		id := c.Params("id")
+		planID := c.Params("id")
 
-		// TODO: เขียน SQL DELETE จากตาราง premium_rates ที่มี plan_id = id ก่อน (เพื่อความสะอาดของข้อมูล)
-		// แล้วค่อย SQL DELETE จากตาราง insurance_plans ที่มี id = id
+		// 1. ลบเรทเบี้ยที่เกี่ยวข้องออกก่อน (ป้องกันติด Foreign Key Constraint)
+		_, err := db.Exec("DELETE FROM public.premium_rates WHERE plan_id = $1", planID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถลบเรทเบี้ยได้: " + err.Error()})
+		}
 
-		return c.JSON(fiber.Map{"message": "Plan deleted successfully", "id": id})
+		// 2. ลบตัวแผนประกันหลัก
+		_, err = db.Exec("DELETE FROM public.insurance_plans WHERE id = $1", planID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถลบแผนประกันได้: " + err.Error()})
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "ลบแผนประกันสำเร็จ",
+		})
 	})
 
 	log.Println("Go Backend กำลังรันที่พอร์ต 8080...")
