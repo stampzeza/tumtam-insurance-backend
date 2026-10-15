@@ -173,8 +173,15 @@ func main() {
 
 	// 1. API เพิ่มแผนประกันใหม่ (Create / Insert)
 	app.Post("/api/plans", func(c *fiber.Ctx) error {
+		// 1. ลอง Print ดดู JSON ดิบๆ ที่ส่งมาจากหน้าบ้าน
+
+		bodyBytes := c.Body()
+
+		println("RAW BODY RECEIVED:", string(bodyBytes))
+
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
+			println("PARSER ERROR DETECTED:", err.Error())
 			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลแผนประกันไม่ถูกต้อง: " + err.Error()})
 		}
 
