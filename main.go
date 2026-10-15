@@ -468,13 +468,16 @@ func SetupAuthRoutes(app *fiber.App, db *sql.DB) {
 
 		if err != nil {
 
-			return c.Status(401).JSON(fiber.Map{"error": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"})
+			return c.Status(401).JSON(fiber.Map{"error": "ไม่พบชื่อผู้ใช้นี้ในระบบ"})
 
 		}
 
-		// แทนที่จะใช้ bcrypt เช็ค ให้เทียบรหัสผ่านตรงๆ ไปก่อนแบบนี้
+		// เทียบรหัสผ่านตรงๆ แบบข้อความธรรมดา
+
 		if req.Password != passwordHash {
+
 			return c.Status(401).JSON(fiber.Map{"error": "รหัสผ่านไม่ถูกต้อง"})
+
 		}
 
 		// ตรวจสอบรหัสผ่านว่าตรงกับ Hash ในฐานข้อมูลไหม
