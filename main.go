@@ -17,17 +17,12 @@ import (
 
 // โครงสร้างข้อมูลตารางเรทเบี้ยประกัน (ใช้ min_age และ max_age)
 type PremiumRate struct {
-	ID             int     `json:"id"`
-	PlanID         int     `json:"plan_id"`
-	MinAge         int     `json:"min_age"`
-	MaxAge         int     `json:"max_age"`
-	AgeRange       string  `json:"age_range"`
-	MaleRate       float64 `json:"male_rate"`
-	FemaleRate     float64 `json:"female_rate"`
-	AnnualRate     float64 `json:"annual_rate"`
-	SemiAnnualRate float64 `json:"semi_annual_rate"`
-	QuarterlyRate  float64 `json:"quarterly_rate"`
-	MonthlyRate    float64 `json:"monthly_rate"`
+	ID         int         `json:"id"`
+	PlanID     int         `json:"plan_id"`
+	MinAge     int         `json:"min_age"`
+	MaxAge     int         `json:"max_age"`
+	MaleRate   interface{} `json:"male_rate"`
+	FemaleRate interface{} `json:"female_rate"`
 }
 
 // โครงสร้างข้อมูลแผนประกัน
@@ -100,17 +95,7 @@ func main() {
 			if err == nil {
 				for subRows.Next() {
 					var r PremiumRate
-					subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate, &r.AnnualRate, &r.SemiAnnualRate, &r.QuarterlyRate, &r.MonthlyRate)
-
-					// 💡 เช็คเงื่อนไข: ถ้า min_age เท่ากับ max_age ให้แสดงเป็นอายุเดียว (เช่น "21 ปี")
-					if r.MinAge == r.MaxAge {
-						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
-					} else if r.MaxAge == 0 {
-						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
-					} else {
-						// แบบช่วงอายุปกติ (เช่น "30 - 35 ปี")
-						r.AgeRange = fmt.Sprintf("%d - %d", r.MinAge, r.MaxAge)
-					}
+					subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate)
 
 					rates = append(rates, r)
 				}
@@ -242,19 +227,21 @@ func main() {
 		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
 		for _, rate := range plan.Rates {
 
-			minAge := toInt(rate.MinAge)
-
-			maxAge := toInt(rate.MaxAge)
-
 			maleRate := toFloat(rate.MaleRate)
 
 			femaleRate := toFloat(rate.FemaleRate)
 
-			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate) 
+			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate, created_at) 
 
-						VALUES ($1, $2, $3, $4, $5)`
+						VALUES ($1, $2, $3, $4, $5, NOW())`
 
-			db.Exec(queryRate, planID, minAge, maxAge, maleRate, femaleRate)
+			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, maleRate, femaleRate)
+
+			if err != nil {
+
+				continue
+
+			}
 
 		}
 
@@ -352,7 +339,7 @@ func toInt(val interface{}) int {
 
 }
 
-// ฟังก์ชันแปลงค่า interface{} เป็น float64 ปลอดภัย
+// ฟังก์ชันแปลง interface{} เป็น float64 ปลอดภัย
 
 func toFloat(val interface{}) float64 {
 
