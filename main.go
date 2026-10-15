@@ -73,7 +73,7 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept",
-		AllowMethods: "GET, POST, OPTIONS",
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 	}))
 
 	// API ดึงข้อมูลแผนประกันทั้งหมด พร้อมเรทเบี้ย
