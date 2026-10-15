@@ -97,12 +97,21 @@ func main() {
 			if err == nil {
 				for subRows.Next() {
 					var r PremiumRate
-					// สแกนให้ตรงกับ 6 ฟิลด์ที่เรา Select มา
-					if err := subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate); err != nil {
+					var mRate, fRate sql.NullFloat64 // ใช้ NullFloat64 เพื่อรองรับค่าตัวเลขจาก numeric
+
+					if err := subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &mRate, &fRate); err != nil {
 						continue
 					}
 
-					// เงื่อนไขจัดรูปแบบช่วงอายุ
+					// แปลงค่าจาก NullFloat64 กลับเป็น float64 ธรรมดาสำหรับใส่ Struct
+					if mRate.Valid {
+						r.MaleRate = mRate.Float64
+					}
+					if fRate.Valid {
+						r.FemaleRate = fRate.Float64
+					}
+
+					// จัดการเรื่องช่วงอายุ (AgeRange) ตามเดิมของคุณ
 					if r.MinAge == r.MaxAge {
 						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
 					} else if r.MaxAge == 0 {
