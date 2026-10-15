@@ -90,6 +90,8 @@ func main() {
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 	}))
 
+	SetupAuthRoutes(app, db)
+
 	// API ดึงข้อมูลแผนประกันทั้งหมด พร้อมเรทเบี้ย
 	app.Get("/api/plans", func(c *fiber.Ctx) error {
 		rows, err := db.Query("SELECT id, title, category, description, google_drive_file_id, slug, is_active FROM public.insurance_plans WHERE is_active = true")
