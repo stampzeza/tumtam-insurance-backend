@@ -169,6 +169,44 @@ func main() {
 
 	})
 
+	// 1. API เพิ่มแผนประกันใหม่ (Create / Insert)
+	app.Post("/api/plans", func(c *fiber.Ctx) error {
+		var plan InsurancePlan
+		if err := c.BodyParser(&plan); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Cannot parse JSON"})
+		}
+
+		// TODO: เขียน SQL INSERT ข้อมูลลงตาราง insurance_plans
+		// และนำ ID ที่เพิ่งสร้าง มาวนลูป INSERT เรทเบี้ยลงตาราง premium_rates
+
+		return c.JSON(fiber.Map{"message": "Plan created successfully", "data": plan})
+	})
+
+	// 2. API แก้ไขแผนประกัน (Update)
+	app.Put("/api/plans/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		var plan InsurancePlan
+		if err := c.BodyParser(&plan); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Cannot parse JSON"})
+		}
+
+		// TODO: เขียน SQL UPDATE ข้อมูลตาราง insurance_plans ตาม id
+		// สำหรับ premium_rates แนะนำให้ใช้วิธี DELETE ของเก่าทิ้งทั้งหมดที่มี plan_id นี้
+		// แล้ว INSERT ชุดใหม่เข้าไปแทน (วิธีนี้ง่ายและสะดวกที่สุดสำหรับการอัปเดตตารางย่อย)
+
+		return c.JSON(fiber.Map{"message": "Plan updated successfully", "id": id})
+	})
+
+	// 3. API ลบแผนประกัน (Delete)
+	app.Delete("/api/plans/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+
+		// TODO: เขียน SQL DELETE จากตาราง premium_rates ที่มี plan_id = id ก่อน (เพื่อความสะอาดของข้อมูล)
+		// แล้วค่อย SQL DELETE จากตาราง insurance_plans ที่มี id = id
+
+		return c.JSON(fiber.Map{"message": "Plan deleted successfully", "id": id})
+	})
+
 	log.Println("Go Backend กำลังรันที่พอร์ต 8080...")
 	log.Fatal(app.Listen(":8080"))
 }
