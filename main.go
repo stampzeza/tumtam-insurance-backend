@@ -19,8 +19,8 @@ import (
 type PremiumRate struct {
 	ID         int         `json:"id"`
 	PlanID     int         `json:"plan_id"`
-	MinAge     int         `json:"min_age"`
-	MaxAge     int         `json:"max_age"`
+	MinAge     interface{} `json:"min_age"`
+	MaxAge     interface{} `json:"max_age"`
 	AgeRange   string      `json:"age_range"`
 	MaleRate   interface{} `json:"male_rate"`
 	FemaleRate interface{} `json:"female_rate"`
@@ -249,12 +249,15 @@ func main() {
 
 		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
 		for _, rate := range plan.Rates {
+			minAge := parseToInt(rate.MinAge)
+
+			maxAge := parseToInt(rate.MaxAge)
 			maleRate := parseToFloat(rate.MaleRate)
 			femaleRate := parseToFloat(rate.FemaleRate)
 
 			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate, created_at) 
 						VALUES ($1, $2, $3, $4, $5, NOW())`
-			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, maleRate, femaleRate)
+			_, err = db.Exec(queryRate, planID, minAge, maxAge, maleRate, femaleRate)
 			if err != nil {
 				continue
 			}
@@ -396,4 +399,26 @@ func parseToFloat(val interface{}) float64 {
 
 	return 0.0
 
+}
+
+func parseToInt(val interface{}) int {
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case string:
+		if v == "" {
+			return 0
+		}
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return 0
+		}
+		return parsed
+	}
+	return 0
 }
