@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 
+	"strconv"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -229,12 +231,21 @@ func main() {
 
 		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
 		for _, rate := range plan.Rates {
+
+			minAge := toInt(rate.MinAge)
+
+			maxAge := toInt(rate.MaxAge)
+
+			maleRate := toFloat(rate.MaleRate)
+
+			femaleRate := toFloat(rate.FemaleRate)
+
 			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate) 
+
 						VALUES ($1, $2, $3, $4, $5)`
-			_, err = db.Exec(queryRate, planID, rate.MinAge, rate.MaxAge, rate.MaleRate, rate.FemaleRate)
-			if err != nil {
-				continue
-			}
+
+			db.Exec(queryRate, planID, minAge, maxAge, maleRate, femaleRate)
+
 		}
 
 		return c.JSON(fiber.Map{
@@ -297,4 +308,68 @@ func sendTelegramNotification(planTitle string, req LeadRequest) {
 			"parse_mode": "Markdown",
 		}).
 		Post(url)
+}
+
+// ฟังก์ชันแปลงค่า interface{} เป็น int ปลอดภัย
+
+func toInt(val interface{}) int {
+
+	if val == nil {
+
+		return 0
+
+	}
+
+	switch v := val.(type) {
+
+	case float64:
+
+		return int(v)
+
+	case int:
+
+		return v
+
+	case string:
+
+		parsed, _ := strconv.Atoi(v)
+
+		return parsed
+
+	}
+
+	return 0
+
+}
+
+// ฟังก์ชันแปลงค่า interface{} เป็น float64 ปลอดภัย
+
+func toFloat(val interface{}) float64 {
+
+	if val == nil {
+
+		return 0.0
+
+	}
+
+	switch v := val.(type) {
+
+	case float64:
+
+		return v
+
+	case int:
+
+		return float64(v)
+
+	case string:
+
+		parsed, _ := strconv.ParseFloat(v, 64)
+
+		return parsed
+
+	}
+
+	return 0.0
+
 }
