@@ -17,13 +17,13 @@ import (
 
 // โครงสร้างข้อมูลตารางเรทเบี้ยประกัน (ใช้ min_age และ max_age)
 type PremiumRate struct {
-	ID         int     `json:"id"`
-	PlanID     int     `json:"plan_id"`
-	MinAge     int     `json:"min_age"`
-	MaxAge     int     `json:"max_age"`
-	AgeRange   string  `json:"age_range"`
-	MaleRate   float64 `json:"male_rate"`   // เปลี่ยนกลับมาเป็น float64
-	FemaleRate float64 `json:"female_rate"` // เปลี่ยนกลับมาเป็น float64
+	ID         int         `json:"id"`
+	PlanID     int         `json:"plan_id"`
+	MinAge     int         `json:"min_age"`
+	MaxAge     int         `json:"max_age"`
+	AgeRange   string      `json:"age_range"`
+	MaleRate   interface{} `json:"male_rate"`
+	FemaleRate interface{} `json:"female_rate"`
 }
 
 // โครงสร้างข้อมูลแผนประกัน
@@ -240,8 +240,8 @@ func main() {
 
 		// 3. Insert เรทเบี้ยชุดใหม่เข้าไปแทน
 		for _, rate := range plan.Rates {
-			maleRate := toFloat(rate.MaleRate)
-			femaleRate := toFloat(rate.FemaleRate)
+			maleRate := parseToFloat(rate.MaleRate)
+			femaleRate := parseToFloat(rate.FemaleRate)
 
 			queryRate := `INSERT INTO public.premium_rates (plan_id, min_age, max_age, male_rate, female_rate, created_at) 
 						VALUES ($1, $2, $3, $4, $5, NOW())`
@@ -347,7 +347,7 @@ func toInt(val interface{}) int {
 
 // ฟังก์ชันแปลง interface{} เป็น float64 ปลอดภัย
 
-func toFloat(val interface{}) float64 {
+func parseToFloat(val interface{}) float64 {
 
 	if val == nil {
 
@@ -367,7 +367,19 @@ func toFloat(val interface{}) float64 {
 
 	case string:
 
-		parsed, _ := strconv.ParseFloat(v, 64)
+		if v == "" {
+
+			return 0.0
+
+		}
+
+		parsed, err := strconv.ParseFloat(v, 64)
+
+		if err != nil {
+
+			return 0.0
+
+		}
 
 		return parsed
 
