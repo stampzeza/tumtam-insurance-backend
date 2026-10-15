@@ -90,21 +90,24 @@ func main() {
 			}
 
 			// ดึงเรทเบี้ยประกันโดยใช้ min_age และ max_age
-			subRows, err := db.Query("SELECT id, plan_id, min_age, max_age, male_rate, female_rate, annual_rate, semi_annual_rate, quarterly_rate, monthly_rate FROM public.premium_rates WHERE plan_id = $1", p.ID)
+			// ดึงเฉพาะคอลัมน์ที่มีอยู่จริง
+			subRows, err := db.Query("SELECT id, plan_id, min_age, max_age, male_rate, female_rate FROM public.premium_rates WHERE plan_id = $1", p.ID)
 
 			rates := []PremiumRate{}
 			if err == nil {
 				for subRows.Next() {
 					var r PremiumRate
-					subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate)
+					// สแกนให้ตรงกับ 6 ฟิลด์ที่เรา Select มา
+					if err := subRows.Scan(&r.ID, &r.PlanID, &r.MinAge, &r.MaxAge, &r.MaleRate, &r.FemaleRate); err != nil {
+						continue
+					}
 
-					// 💡 เช็คเงื่อนไข: ถ้า min_age เท่ากับ max_age ให้แสดงเป็นอายุเดียว (เช่น "21 ปี")
+					// เงื่อนไขจัดรูปแบบช่วงอายุ
 					if r.MinAge == r.MaxAge {
 						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
 					} else if r.MaxAge == 0 {
 						r.AgeRange = fmt.Sprintf("%d", r.MinAge)
 					} else {
-						// แบบช่วงอายุปกติ (เช่น "30 - 35 ปี")
 						r.AgeRange = fmt.Sprintf("%d - %d", r.MinAge, r.MaxAge)
 					}
 
