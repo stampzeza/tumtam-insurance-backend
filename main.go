@@ -211,27 +211,16 @@ func main() {
 	// 2. API แก้ไขแผนประกัน (Update)
 	app.Put("/api/plans/:id", func(c *fiber.Ctx) error {
 
-		// ลองรับเป็น Map ดิบๆ ก่อนเลย
+		// 1. ลอง Print ดู JSON ดิบๆ ที่ส่งมาจากหน้าบ้าน
 
-		var rawData map[string]interface{}
+		bodyBytes := c.Body()
 
-		if err := c.BodyParser(&rawData); err != nil {
-
-			println("CRITICAL PARSE ERROR:", err.Error())
-
-			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
-
-		}
-
-		println("SUCCESSFULLY RECEIVED JSON DATA!")
-
-		// ตรงนี้แค่เทสปริ้นท์ดู
-
-		return c.JSON(fiber.Map{"success": true, "received": rawData})
+		println("RAW BODY RECEIVED:", string(bodyBytes))
 
 		planID := c.Params("id")
 		var plan InsurancePlan
 		if err := c.BodyParser(&plan); err != nil {
+			println("PARSER ERROR DETECTED:", err.Error())
 			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง: " + err.Error()})
 		}
 
