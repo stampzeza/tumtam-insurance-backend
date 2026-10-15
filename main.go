@@ -17,13 +17,13 @@ import (
 
 // โครงสร้างข้อมูลตารางเรทเบี้ยประกัน (ใช้ min_age และ max_age)
 type PremiumRate struct {
-	ID         int         `json:"id"`
-	PlanID     int         `json:"plan_id"`
-	MinAge     int         `json:"min_age"`
-	MaxAge     int         `json:"max_age"`
-	AgeRange   string      `json:"age_range"`
-	MaleRate   interface{} `json:"male_rate"`
-	FemaleRate interface{} `json:"female_rate"`
+	ID         int     `json:"id"`
+	PlanID     int     `json:"plan_id"`
+	MinAge     int     `json:"min_age"`
+	MaxAge     int     `json:"max_age"`
+	AgeRange   string  `json:"age_range"`
+	MaleRate   float64 `json:"male_rate"`   // เปลี่ยนกลับมาเป็น float64
+	FemaleRate float64 `json:"female_rate"` // เปลี่ยนกลับมาเป็น float64
 }
 
 // โครงสร้างข้อมูลแผนประกัน
