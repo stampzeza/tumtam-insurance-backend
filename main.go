@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/go-resty/resty/v2"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -62,6 +63,22 @@ type LeadRequest struct {
 	DateOfBirth string `json:"date_of_birth"`
 }
 
+type RegisterRequest struct {
+	Usercode         string `json:"usercode"`
+	Username         string `json:"username"`
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+	FullName         string `json:"full_name"`
+	PhoneNumber      string `json:"phone_number"`
+	LineID           string `json:"line_id"`
+	TelegramBotToken string `json:"telegram_bottoken"`
+	TelegramChatID   string `json:"telegram_chatid"`
+}
+
+type ApproveRequest struct {
+	Status string `json:"status"` // ค่าที่ส่งมาจะเป็น 'approved' หรือ 'rejected'
+}
+
 func main() {
 	_ = godotenv.Load()
 
@@ -90,6 +107,9 @@ func main() {
 	}))
 
 	SetupAuthRoutes(app, db)
+
+	// เปิดเส้นทางให้คนทั่วไปเข้ามาสมัครตัวแทนได้
+	app.Post("/api/register", RegisterAgentHandler(db))
 
 	// API ดึงข้อมูลแผนประกันทั้งหมด พร้อมเรทเบี้ย
 	app.Get("/api/plans", func(c *fiber.Ctx) error {
@@ -308,6 +328,10 @@ func main() {
 			"message": "ลบแผนประกันสำเร็จ",
 		})
 	})
+
+	// เส้นทางจัดการตัวแทน
+	adminProtected.Get("/agents/pending", GetPendingAgentsHandler(db))
+	adminProtected.Put("/agents/:id/status", UpdateAgentStatusHandler(db))
 
 	app.Listen(":3000")
 
@@ -563,4 +587,144 @@ func AuthMiddleware() fiber.Handler {
 
 	}
 
+}
+
+func RegisterAgentHandler(db *sql.DB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var req RegisterRequest
+
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง"})
+		}
+
+		// ตรวจสอบข้อมูลจำเป็นเบื้องต้น
+		if req.Username == "" || req.Password == "" || req.FullName == "" || req.PhoneNumber == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "กรุณากรอกข้อมูลสำคัญให้ครบถ้วน"})
+		}
+
+		// เข้ารหัสผ่าน (Password Hashing)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถเข้ารหัสผ่านได้"})
+		}
+
+		// บันทึกลงฐานข้อมูล PostgreSQL
+		query := `
+			INSERT INTO public.users 
+			(usercode, username, email, password_hash, full_name, phone_number, line_id, telegram_bottoken, telegram_chatid, role, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'agent', 'pending')
+			RETURNING id
+		`
+
+		var newID int
+		err = db.QueryRow(
+			query,
+			req.Usercode,
+			req.Username,
+			req.Email,
+			string(hashedPassword),
+			req.FullName,
+			req.PhoneNumber,
+			req.LineID,
+			req.TelegramBotToken,
+			req.TelegramChatID,
+		).Scan(&newID)
+
+		if err != nil {
+			// ดักกรณี Username หรือ Usercode ซ้ำ
+			return c.Status(400).JSON(fiber.Map{"error": "ชื่อผู้ใช้ (Username) หรือรหัสตัวแทน (Usercode) นี้ถูกใช้งานไปแล้ว"})
+		}
+
+		return c.Status(201).JSON(fiber.Map{
+			"success": true,
+			"message": "สมัครสมาชิกสำเร็จ กรุณารอการอนุมัติจากผู้ดูแลระบบ",
+			"user_id": newID,
+		})
+	}
+}
+
+// 1. API ดึงรายชื่อตัวแทนทั้งหมดที่สถานะ 'pending' (รออนุมัติ)
+func GetPendingAgentsHandler(db *sql.DB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		query := `
+			SELECT id, usercode, username, email, full_name, phone_number, line_id, created_at 
+			FROM public.users 
+			WHERE role = 'agent' AND status = 'pending'
+			ORDER BY created_at DESC
+		`
+
+		rows, err := db.Query(query)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถดึงข้อมูลตัวแทนได้"})
+		}
+		defer rows.Close()
+
+		type AgentItem struct {
+			ID          int    `json:"id"`
+			Usercode    string `json:"usercode"`
+			Username    string `json:"username"`
+			Email       string `json:"email"`
+			FullName    string `json:"full_name"`
+			PhoneNumber string `json:"phone_number"`
+			LineID      string `json:"line_id"`
+			CreatedAt   string `json:"created_at"`
+		}
+
+		var agents []AgentItem
+		for rows.Next() {
+			var a AgentItem
+			if err := rows.Scan(&a.ID, &a.Usercode, &a.Username, &a.Email, &a.FullName, &a.PhoneNumber, &a.LineID, &a.CreatedAt); err != nil {
+				continue
+			}
+			agents = append(agents, a)
+		}
+
+		// ถ้าไม่มีข้อมูล ให้คืนค่าเป็น Array เปล่าๆ ป้องกัน Null บนหน้าบ้าน
+		if agents == nil {
+			agents = []AgentItem{}
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"data":    agents,
+		})
+	}
+}
+
+// 2. API สำหรับแอดมินกด ออนุมัติ (approved) หรือ ปฏิเสธ (rejected)
+func UpdateAgentStatusHandler(db *sql.DB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		agentID := c.Params("id")
+
+		var req ApproveRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "ข้อมูลไม่ถูกต้อง"})
+		}
+
+		// ตรวจสอบว่าส่งสถานะที่ถูกต้องมาไหม
+		if req.Status != "approved" && req.Status != "rejected" {
+			return c.Status(400).JSON(fiber.Map{"error": "สถานะไม่ถูกต้อง (ต้องเป็น approved หรือ rejected เท่านั้น)"})
+		}
+
+		query := `
+			UPDATE public.users 
+			SET status = $1, updated_at = CURRENT_TIMESTAMP 
+			WHERE id = $2 AND role = 'agent'
+		`
+
+		result, err := db.Exec(query, req.Status, agentID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "ไม่สามารถอัปเดตสถานะได้"})
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil || rowsAffected == 0 {
+			return c.Status(404).JSON(fiber.Map{"error": "ไม่พบตัวแทนที่ต้องการอัปเดต"})
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "อัปเดตสถานะตัวแทนเรียบร้อยแล้ว",
+		})
+	}
 }
