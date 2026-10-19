@@ -123,7 +123,7 @@ func main() {
 		var plans []InsurancePlan
 		for rows.Next() {
 			var p InsurancePlan
-			if err := rows.Scan(&p.ID, &p.Title, &p.Category, &p.Description, &p.GoogleDriveFileID, &p.Slug, &p.IsActive); err != nil {
+			if err := rows.Scan(&p.ID, &p.Title, &p.Category, &p.Description, &p.GoogleDriveFileID, &p.Slug, &p.IsActive, &p.ViewCount); err != nil {
 				continue
 			}
 
