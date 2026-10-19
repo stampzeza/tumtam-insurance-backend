@@ -51,6 +51,7 @@ type InsurancePlan struct {
 	GoogleDriveFileID string        `json:"google_drive_file_id"`
 	Slug              string        `json:"slug"`
 	IsActive          bool          `json:"is_active"`
+	ViewCount         int           `json:"view_count"`
 	Rates             []PremiumRate `json:"rates"`
 }
 
@@ -113,7 +114,7 @@ func main() {
 
 	// API ดึงข้อมูลแผนประกันทั้งหมด พร้อมเรทเบี้ย
 	app.Get("/api/plans", func(c *fiber.Ctx) error {
-		rows, err := db.Query("SELECT id, title, category, description, google_drive_file_id, slug, is_active FROM public.insurance_plans WHERE is_active = true")
+		rows, err := db.Query("SELECT id, title, category, description, google_drive_file_id, slug, is_active, view_count FROM public.insurance_plans WHERE is_active = true")
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
