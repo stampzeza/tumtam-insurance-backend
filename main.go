@@ -341,8 +341,8 @@ func main() {
 }
 
 func sendTelegramNotification(planTitle string, req LeadRequest) {
-	botToken := os.Getenv("8734324884:AAHT5dVsZ9GWfUyxBrJy6EO0DIaglJxVQMY")
-	chatID := os.Getenv("6922016520")
+	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	chatID := os.Getenv("TELEGRAM_CHAT_ID")
 
 	if botToken == "" || chatID == "" {
 		return
